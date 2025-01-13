@@ -6,31 +6,45 @@ import { calculateConditions, calculateVariableList, ConditionObjects, VariableL
 import Condition from "../Interfaces/Condition";
 
 interface EdgeProps {
+    startNodeName: string;
+    endNodeName: string;
+    key?: string;
     selected: boolean;
     isNew: boolean;
     position: { x0: number; y0: number; x1: number; y1: number };
+    edgeInfo?: EdgeClickComponentInput; //This is to load edges from JSON
     onMouseDownEdge: () => void;
     onClickDelete: () => void;
-    getJSONInfo: (info : EdgeClickComponentInput)=>void;
+    getResult: (boolean) => void; //This is to pass result to higher component
+    getJSONInfo: (info : EdgeClickComponentInput)=>void; //This is to pass JSON info to higher component
 }
 
 const EdgeComponent: Component<EdgeProps> = (props: EdgeProps) => {
     const [isMenuActive, toggleMenu] = createSignal<Boolean>(false);
     const [menuExists, setMenuExists] = createSignal<Boolean>(false);
+    //Should include a call to platform to obtain these, these must execute animations
     const callbacks = ["Animation1", "Animation2"]
     const [middlePoint, setMiddlePoint] = createSignal<{ x: number; y: number }>({
         x: props.position.x0 + (props.position.x1 - props.position.x0) / 2,
         y: props.position.y0 + (props.position.y1 - props.position.y0) / 2,
     });
 
+    //To set edge result, probably not required, could be removed during cleanup along with it's class implementation in the return below
+    const [currentResult, setCurrentResult] = createSignal<Boolean>(false);
+
+    //To pass edgeResult to higher component
     const handleResult = (result : boolean) : void => {
-        console.log("EC: ", result);
+        setCurrentResult(result);
+        props.getResult(result);
     }
 
+    //To pass JSON info to higher component
     const handleGetEdgeClickComponentInfo = (info : EdgeClickComponentInput) : void => {
         console.log("ECCInfo : ", JSON.stringify(info));
     }
 
+    //This is where the default speed and callbacks are hardcoded for now
+    //1.5 was used just to show it's functional, not completely hardcoded
     const dummyInput : EdgeClickComponentInput = {
         callbacks: callbacks,
         speed: 1.5,
@@ -52,6 +66,14 @@ const EdgeComponent: Component<EdgeProps> = (props: EdgeProps) => {
         });
     });
 
+    const [startX , startY, endX, endY]  = [props.position.x0, props.position.y0, props.position.x1, props.position.y1];
+
+    // Calculate the control points for the Bezier curve
+    const controlX1 = (startX + endX) / 2;
+    const controlY1 = startY;
+    const controlX2 = (startX + endX) / 2;
+    const controlY2 = endY;
+
     // Give the edge a little offset so it curves
     function calculateOffset(value: number): number {
         return value / 2;
@@ -63,6 +85,7 @@ const EdgeComponent: Component<EdgeProps> = (props: EdgeProps) => {
         if(!menuExists()){
             setMenuExists(true);
             CreateMenu({
+                name: `${props.startNodeName} to ${props.endNodeName}`,
                 wrapperElement: document.getElementById("edgeMenu"), 
                 position: {x: 0, y: 0}, 
                 items: callbacks
@@ -74,6 +97,14 @@ const EdgeComponent: Component<EdgeProps> = (props: EdgeProps) => {
         
     }
 
+    //Calculate angle for arrow in the middle of edges
+    const calculateAngle = () => {
+        const dx = props.position.x1 - props.position.x0;
+        const dy = props.position.y1 - props.position.y0;
+        return (Math.atan2(dy, dx) * 180) / Math.PI; // Convert radians to degrees
+    };
+    
+
     function handleOnClickDelete(event: any) {
         // Disable click on board event
         event.stopPropagation();
@@ -82,11 +113,14 @@ const EdgeComponent: Component<EdgeProps> = (props: EdgeProps) => {
     }
 
     return (
-        <div id="edgeClickComponentOut" >
-            <div id="edgeMenu" class = {styles.edgeClickMenu} style={{display: isMenuActive() ? "block" : "none"}}></div>
+        <div id="edgeClickComponentOut" class={`${currentResult}`}>
+            <div id="edgeMenu" class={styles.edgeClickMenu} style={{ display: isMenuActive() ? "block" : "none" }}></div>
             <svg class={styles.wrapper} id="edgeClickComponent">
+                {/* Edge Path */}
                 <path
-                    class={props.isNew ? styles.edgeNew : props.selected ? styles.edgeSelected : styles.edge}
+                    class={
+                        props.isNew ? styles.edgeNew : props.selected ? styles.edgeSelected : styles.edge
+                    }
                     d={`M ${props.position.x0} ${props.position.y0} C ${
                         props.position.x0 + calculateOffset(Math.abs(props.position.x1 - props.position.x0))
                     } ${props.position.y0}, ${props.position.x1 - calculateOffset(Math.abs(props.position.x1 - props.position.x0))} ${
@@ -94,20 +128,28 @@ const EdgeComponent: Component<EdgeProps> = (props: EdgeProps) => {
                     }, ${props.position.x1} ${props.position.y1}`}
                     onMouseDown={handleOnMouseDownEdge}
                 />
+    
+                {/* Arrow */}
+                <path
+                    d="M -5 -5 L 5 0 L -5 5 Z" // Arrowhead path
+                    class={styles.arrow}
+                    transform={`translate(${middlePoint().x}, ${middlePoint().y}) rotate(${calculateAngle()})`}
+                />
+    
+                {/* Delete Button */}
                 <g
                     class={props.selected ? styles.delete : styles.deleteHidden}
                     transform={`translate(${middlePoint().x}, ${middlePoint().y - (props.selected ? 24 : 0)})`}
                     onMouseDown={handleOnClickDelete}
                 >
                     <circle class={styles.circle} />
-
                     <svg
                         fill="currentColor"
                         stroke-width="0"
                         width="30"
                         height="30"
                         viewBox="210 240 1000 1000"
-                        style="overflow: visible;"
+                        style={{ overflow: "visible" }}
                         class={styles.icon}
                     >
                         <path d="M135.2 17.7C140.6 6.8 151.7 0 163.8 0h120.4c12.1 0 23.2 6.8 28.6 17.7L320 32h96c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 96 0 81.7 0 64s14.3-32 32-32h96l7.2-14.3zM32 128h384v320c0 35.3-28.7 64-64 64H96c-35.3 0-64-28.7-64-64V128zm96 64c-8.8 0-16 7.2-16 16v224c0 8.8 7.2 16 16 16s16-7.2 16-16V208c0-8.8-7.2-16-16-16zm96 0c-8.8 0-16 7.2-16 16v224c0 8.8 7.2 16 16 16s16-7.2 16-16V208c0-8.8-7.2-16-16-16zm96 0c-8.8 0-16 7.2-16 16v224c0 8.8 7.2 16 16 16s16-7.2 16-16V208c0-8.8-7.2-16-16-16z"></path>
@@ -116,6 +158,7 @@ const EdgeComponent: Component<EdgeProps> = (props: EdgeProps) => {
             </svg>
         </div>
     );
+    
 };
 
 export default EdgeComponent;

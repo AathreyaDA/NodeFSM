@@ -2,22 +2,24 @@ import dropDownElement from "./dropdown";
 import textInput from "./textInput";
 import VariableStructure from "../../Interfaces/VariableStructure";
 import Condition from "../../Interfaces/Condition";
-import { useEffect, useState } from "react";
-// import { createSignal } from "solid-js";
-
-
-const conditionLine = (variable0? : VariableStructure, variableList? : VariableStructure[], selectedVariable? : Condition) =>{
-    var line_id;
+import { createEffect, createSignal } from "solid-js";
+  
+const conditionLine = (triggerCalculation: () => void, variable0? : VariableStructure, variableList? : VariableStructure[], selectedVariable? : Condition) =>{
     var variableDropdown;
-
+    var line_id;
+    // var triggeringValue = false;
+    const triggerToggle = () =>{
+        triggerCalculation();
+    }
     if(variable0){
         const line_id = Math.floor(Math.random() * 10000);
     return(
         <div id={`${line_id}`}>
-            {variable0.name + " "}{typeof(variable0.value) == 'number' ? dropDownElement(['greater than', 'equals', 'lesser than', 'not equals'], 'equals') : dropDownElement(['equals', 'not equals'], 'equals')}{textInput({attribute:"", defaultValue:(typeof variable0.value == "number" ? 0 : "false"), fieldWidth : 5})}<span onClick={()=>{
+            {variable0.name + " "}{typeof(variable0.value) == 'number' ? dropDownElement(['greater than', 'equals', 'lesser than', 'not equals'], 'equals') : dropDownElement(['equals', 'not equals'], 'equals')}{textInput({attribute:"", defaultValue:(typeof variable0.value == "number" ? 0 : "false"), triggerToggle: triggerToggle, fieldWidth : 5})}
+            <span onClick={()=>{
                 var line_element = document.getElementById(`${line_id}`);
                 line_element.parentNode.removeChild(line_element);
-            }}><b style={{position: "relative", left:"10%", background:"white", "padding-left":'5px', "padding-right":"5px", color:"red", cursor:"pointer"}}>-</b></span>
+            }}><b style={{position: "absolute", right:"10%", background:"white", "padding-left":'5px', "padding-right":"5px", color:"red", cursor:"pointer", "z-index":20}}>-</b></span>
         </div>
     )
     }
@@ -30,6 +32,7 @@ const conditionLine = (variable0? : VariableStructure, variableList? : VariableS
     var classListValue;
     var isNumber;
     var variable;
+    
     const updateType = () =>{
         // console.log('updated');
         variableDropdown = document.getElementById("main_" + line_id);
@@ -38,6 +41,13 @@ const conditionLine = (variable0? : VariableStructure, variableList? : VariableS
         // console.log("clsv2: " + classListValue);
         variable = classListValue;
     }
+    
+    // createEffect(()=>{
+    //     console.log("triggeredYeah")
+    //     triggerCalculation();
+    // }, [triggeringValue()])
+
+    
     return (
         <div id={`${line_id}`} onClick = {updateType} class="conditionLine">
             {variableDropdown}
@@ -84,6 +94,7 @@ const conditionLine = (variable0? : VariableStructure, variableList? : VariableS
                         ).value === "number"
                             ? 0
                             : "false")),
+                            triggerToggle: triggerToggle,
                     fieldWidth: 5,
                 })
             }
@@ -97,8 +108,8 @@ const conditionLine = (variable0? : VariableStructure, variableList? : VariableS
             >
                 <b
                     style={{
-                        position: "relative",
-                        left: "10%",
+                        position: "absolute",
+                        right: "2%",
                         background: "white",
                         "padding-left" : "5px",
                         "padding-right": "5px",

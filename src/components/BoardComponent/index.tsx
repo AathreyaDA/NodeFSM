@@ -1,15 +1,19 @@
-import { Accessor, Component, For, Index, Setter, createSignal, onMount } from "solid-js";
+import { Accessor, Component, For, Index, Setter, createSignal, onMount, createEffect } from "solid-js";
 import NodeComponent from "../NodeComponent";
 import ButtonsComponent from "../ButtonsComponent";
 import styles from "./styles.module.css";
 import EdgeComponent from "../EdgeComponent";
 import RightClickMenu from "../RightClickMenu.jsx"
 import EdgeClickComponentInput from "../Interfaces/EdgeClickComponentInput";
-
+import SavedNode from "../Interfaces/SavedNode";
+import { savedNodes } from "../TestValues";
+import SavedEdge from "../Interfaces/SavedEdge";
 const options = [
     { text: 'Option 1', callback: () => console.log('Option 1 clicked') },
     { text: 'Option 2', callback: () => console.log('Option 2 clicked') },
   ];
+  
+//Node class
 interface Node {
     id: string;
     numberInputs: number;
@@ -21,11 +25,13 @@ interface Node {
     outputEdgeIds: { get: Accessor<string[]>; set: Setter<string[]> };
 }
 
+//Variable Structure, used for determining type of trigger
 interface VariableStructure{
     name: string
     value: number|boolean
 }
 
+//For the whole board
 interface BoardInput{
     variablesList : VariableStructure[]
     nodes : Node[]
@@ -41,14 +47,19 @@ interface Edge {
     currStartPosition: { get: Accessor<{ x: number; y: number }>; set: Setter<{ x: number; y: number }> };
     prevEndPosition: { get: Accessor<{ x: number; y: number }>; set: Setter<{ x: number; y: number }> };
     currEndPosition: { get: Accessor<{ x: number; y: number }>; set: Setter<{ x: number; y: number }> };
+    result?: boolean
 }
 
 const BoardComponent: Component = (props : BoardInput) => {
     // Signals
+
+    //For moving around the board
     const [grabbingBoard, setGrabbingBoard] = createSignal<boolean>(false);
     const [selectedNode, setSelectedNode] = createSignal<string | null>(null);
     const [selectedEdge, setSelectedEdge] = createSignal<string | null>(null);
     const [newEdge, setNewEdge] = createSignal<Edge | null>(null);
+
+    //This is to stop other movements when typing node name
     const [insideInput, setInsideInput] = createSignal<{
         nodeId: string;
         inputIndex: number;
@@ -61,9 +72,13 @@ const BoardComponent: Component = (props : BoardInput) => {
     const [nodes, setNodes] = createSignal<Node[]>([]);
     const [edges, setEdges] = createSignal<Edge[]>([]);
     const [scale, setScale] = createSignal<number>(1);
+    //These are for future use where transitions can be created from right click instead of pre-built positions
     const [rightClickActive, setRightClick] = createSignal<Boolean>(false);
     const [transitioning, setTransitioning] = createSignal<Boolean>(false);
     const [currentState, setCurrentState] = createSignal<Node>(null);
+    //For future use, to identify how many nodes were loaded from saves
+    const [loadNumber, setLoadNumber] = createSignal<Number>(0);
+
 
     onMount(() => {
         const boardElement = document.getElementById("board");
@@ -86,7 +101,14 @@ const BoardComponent: Component = (props : BoardInput) => {
                 { passive: false }
             );
         }
+
+        loadSavedNodes(savedNodes);
     });
+
+    const showState = () => {
+        console.log("current state: ", currentState() ? currentState().name : null);
+    }
+    
 
     // Handlers
     function handleOnMouseDownBoard(event: any) {
@@ -258,7 +280,7 @@ const BoardComponent: Component = (props : BoardInput) => {
             node.prevPosition.set((_) => {
                 return { x: node.currPosition.get().x * scale(), y: node.currPosition.get().y * scale() };
             });
-            console.log(node.inputEdgeIds.get());
+            // console.log(node.inputEdgeIds.get());
             // Update input edges positions
             for (let i = 0; i < node.inputEdgeIds.get().length; i++) {
                 const edgeId = node.inputEdgeIds.get()[i];
@@ -283,11 +305,13 @@ const BoardComponent: Component = (props : BoardInput) => {
         }
     }
 
+    //This is for future use, to create transitions from right click
     function handleOnMouseRightDownNode(id : string, event : any){
         // console.log("Right Clicked");
         setTransitioning(true);
         setRightClick(true);
     }
+    //To add nodes
     function handleOnClickAdd(numberInputs: number, numberOutputs: number) {
         // Create random positions
         const randomX = Math.random() * window.innerWidth;
@@ -312,8 +336,95 @@ const BoardComponent: Component = (props : BoardInput) => {
                 outputEdgeIds: { get: outputsEdgesIds, set: setOutputsEdgesIds },
             },
         ]);
+        saveNodes();
     }
 
+    //To load nodes from saves
+    function loadSavedNodes(savedNodes : SavedNode[]) {
+        for(let i=0; i<savedNodes.length; i++){
+            let currentNode = savedNodes[i];
+            // Create signal
+            const [nodePrev, setNodePrev] = createSignal<{ x: number; y: number }>({ x: currentNode.x, y: currentNode.y });
+            const [nodeCurr, setNodeCurr] = createSignal<{ x: number; y: number }>({ x: currentNode.x, y: currentNode.y });
+            const [inputsEdgesIds, setInputsEdgesIds] = createSignal<string[]>([]);
+            const [outputsEdgesIds, setOutputsEdgesIds] = createSignal<string[]>([]);
+
+            // Update global nodes array
+            setNodes([
+                ...nodes(),
+                {
+                    id: `${currentNode.id}`,
+                    name: currentNode.name,
+                    numberInputs: currentNode.numberInputs,
+                    numberOutputs: currentNode.numberOutputs,
+                    prevPosition: { get: nodePrev, set: setNodePrev },
+                    currPosition: { get: nodeCurr, set: setNodeCurr },
+                    inputEdgeIds: { get: inputsEdgesIds, set: setInputsEdgesIds },
+                    outputEdgeIds: { get: outputsEdgesIds, set: setOutputsEdgesIds },
+                },
+            ]);
+        }
+        
+    }
+
+    //To save nodes to json, right now just logging
+    const saveNodes = () => {
+        var tempNodes = nodes();
+        var finalNodes = [];
+        for(let i = 0; i < tempNodes.length; i++){
+            if(tempNodes[i].name)
+                finalNodes[finalNodes.length] = tempNodes[i];
+            else{
+                tempNodes[i].name="state";
+                finalNodes[finalNodes.length] = tempNodes[i]
+            }
+        }
+        console.log(finalNodes);
+    }
+
+    //To update result of transition edge conditions
+    const handleEdgeResult = (edgeId: string, result : boolean) => {
+        const edgeID = edges().findIndex((edge) => edge.id === edgeId);
+        const updatedEdges = [...edges()];
+        updatedEdges[edgeID] = { ...edges()[edgeID], result: result };
+        setEdges(updatedEdges);
+    }
+
+    //To initialize state. It starts from null and selects first node as start state. Should implement a separate start node.
+    createEffect(()=>{
+        showState();
+        setNextState(currentState());
+    })
+
+
+    //Function to setNext state if an edge from current state is true
+    const setNextState = (node : Node) => {
+        if(!node){
+            if(!nodes()){
+                return;
+            }
+            setCurrentState(nodes()[0])
+            return;
+        }
+        const outputs = node.outputEdgeIds.get();
+
+        const uniqueEdgeIds = outputs.filter((value, index, array) => {
+            return array.indexOf(value) === index;
+        });
+
+        const uniqueEdges = uniqueEdgeIds.map((edgeId) => edges().find((edge) => edge.id === edgeId)).filter((edge) => edge !== undefined);
+
+        for (let i = 0; i < uniqueEdges.length; i++) {
+            if(uniqueEdges[i].result){
+                setCurrentState(nodes().find((node) => node.id === uniqueEdges[i].nodeEndId));
+                return;
+            }
+        }
+
+        // Log "hello" for the node
+        // console.log("hello");
+    }
+    
     function handleOnClickDelete() {
         // Find node in global nodes array
         const node = nodes().find((node) => node.id === selectedNode());
@@ -354,13 +465,10 @@ const BoardComponent: Component = (props : BoardInput) => {
         setSelectedNode(null);
     }
 
-    const jsonEdge = () => {
-        // console.log(edges());
-    }
     function handleOnMouseDownOutput(outputPositionX: number, outputPositionY: number, nodeId: string, outputIndex: number) {
         // Deselect node
         setSelectedNode(null);
-        jsonEdge();
+        // jsonEdge();
 
         const boardWrapperElement = document.getElementById("boardWrapper");
 
@@ -393,6 +501,7 @@ const BoardComponent: Component = (props : BoardInput) => {
                 currStartPosition: { get: currEdgeStart, set: setCurrEdgeStart },
                 prevEndPosition: { get: prevEdgeEnd, set: setPrevEdgeEnd },
                 currEndPosition: { get: currEdgeEnd, set: setCurrEdgeEnd },
+                result  : false
             });
         }
     }
@@ -434,6 +543,7 @@ const BoardComponent: Component = (props : BoardInput) => {
         }
     }
 
+    //Method to log info of edge's menu (like conditions, speed, etc..,)
     const handleGetJSONInfo = (info : EdgeClickComponentInput) =>{
         console.log(JSON.stringify(info));
         // console.log("component: ", EdgeComponent(null));
@@ -453,7 +563,7 @@ const BoardComponent: Component = (props : BoardInput) => {
                 <For each={nodes()}>
                     {(node: Node) => (
                         <NodeComponent
-                            name = ""
+                            name = {node.name}
                             id={node.id}
                             x={node.currPosition.get().x}
                             y={node.currPosition.get().y}
@@ -470,6 +580,8 @@ const BoardComponent: Component = (props : BoardInput) => {
                 </For>
                 {newEdge() !== null && (
                     <EdgeComponent
+                        startNodeName={nodes().find((node) => node.id === newEdge()!.nodeStartId)?.name}
+                        endNodeName={nodes().find((node) => node.id === newEdge()!.nodeEndId)?.name}
                         selected={false}
                         isNew={true}
                         position={{
@@ -481,25 +593,31 @@ const BoardComponent: Component = (props : BoardInput) => {
                         onMouseDownEdge={() => {}}
                         onClickDelete={() => {}}
                         getJSONInfo={handleGetJSONInfo}
+                        getResult={()=>{}}
                     />
                 )}
-                <For each={edges()}>
-                    {(edge: Edge) => (
-                        <EdgeComponent
-                            selected={selectedEdge() === edge.id}
-                            isNew={false}
-                            position={{
-                                x0: edge.currStartPosition.get().x,
-                                y0: edge.currStartPosition.get().y,
-                                x1: edge.currEndPosition.get().x,
-                                y1: edge.currEndPosition.get().y,
-                            }}
-                            onMouseDownEdge={() => handleOnMouseDownEdge(edge.id)}
-                            onClickDelete={() => handleOnDeleteEdge(edge.id)}
-                            getJSONInfo={handleGetJSONInfo}
-                        />
-                    )}
-                </For>
+                {edges().map((edge: Edge, index: number) => (
+                    <EdgeComponent
+                        startNodeName={newEdge() ? (nodes().find((node) => node.id === newEdge()!.nodeStartId)?.name) : "null"}
+                        endNodeName={newEdge() ? nodes().find((node) => node.id === newEdge()!.nodeEndId)?.name : "null"}
+                        key={edge.id} // Add a unique key for React reconciliation
+                        selected={selectedEdge() === edge.id}
+                        isNew={false}
+                        position={{
+                            x0: edge.currStartPosition.get().x,
+                            y0: edge.currStartPosition.get().y,
+                            x1: edge.currEndPosition.get().x,
+                            y1: edge.currEndPosition.get().y,
+                        }}
+                        onMouseDownEdge={() => handleOnMouseDownEdge(edge.id)}
+                        onClickDelete={() => handleOnDeleteEdge(edge.id)}
+                        getJSONInfo={handleGetJSONInfo}
+                        getResult={(result: boolean)=>{
+                        handleEdgeResult((edges()[index]).id, result)
+                        }}
+                    />
+                ))}
+
             </div>
             {/* {rightClickActive() ? <div style={{position: "absolute", top:100+"px"}}>HelloRight</div> : <div>Hello</div>} */}
         </div>

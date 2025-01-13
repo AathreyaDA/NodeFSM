@@ -1,3 +1,4 @@
+
 import { Accessor, Component, For, createEffect, createSignal } from "solid-js";
 import styles from "./styles.module.css";
 
@@ -17,7 +18,7 @@ interface NodeProps {
 }
 
 const NodeComponent: Component<NodeProps> = (props: NodeProps) => {
-    // Handlers
+    // Constant number of inputs and outputs, this will be changed to dynamically create them on rightclick transitions
     const fixedNumberInput = 2;
     const fixedNumberOutput = 2;
     function handleMouseDownOutput(ref: any, event: any, outputIndex: number) {
@@ -50,6 +51,7 @@ const NodeComponent: Component<NodeProps> = (props: NodeProps) => {
     }
     return (
         <div
+            id = {"node"+props.id}
             class={props.selected ? styles.nodeSelected : styles.node}
             style={{
                 transform: `translate(${props.x}px, ${props.y}px)`,
@@ -69,7 +71,7 @@ const NodeComponent: Component<NodeProps> = (props: NodeProps) => {
             }}
             onContextMenu={handleContextMenu}
         >
-            <div ><input type="text" class={styles.nodeTitle} value="State"></input></div>
+            <div ><input type="text" class={styles.nodeTitle} value={props.name ? props.name : "State"}></input></div>
             <div class={styles.inputsWrapper}>
                 {/* <For each={[...Array(Number(props.numberInputs)).keys()]}> */}
                 <For each={[...Array(Number(fixedNumberInput)).keys()]}>
